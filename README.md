@@ -18,7 +18,6 @@ This Trainer is free to use!
 3. 木材、食物、黄金、石料分别输入数值并各自点击“应用”。其他功能也可用对应按钮或小键盘热键执行。
 4. “瞬间研发 / 建造 / 生产”是**一次性操作**，只处理当前任务或队列；下次使用需再点一次。
 5. 右上角可切换简体中文、繁體中文和 English。
-6. 左下角“项目主页：GitHub”可打开本仓库。
 
 | 热键 | 功能 |
 | --- | --- |
@@ -58,7 +57,6 @@ This trainer is for **single-player use only**. It modifies the running game's m
 3. Enter and apply wood, food, gold, and stone amounts **separately**. Other features have individual buttons and numpad hotkeys.
 4. Instant research, building, and recruitment are **one-shot actions** on current tasks or queues. Click again for later tasks.
 5. Switch between Simplified Chinese, Traditional Chinese, and English in the top-right corner.
-6. Use the bottom-left “Project page: GitHub” link to open this repository.
 
 | Hotkey | Feature |
 | --- | --- |
