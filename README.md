@@ -37,8 +37,7 @@ This Trainer is free to use!
 - **游戏账号风险无法排除。** 官方说明作弊可能导致账号处罚，严重或重复违规可能被暂停聊天、多人服务甚至游戏访问；游戏也可能提示“Tampering Detected”。本项目没有获得单机修改器的官方豁免，不能保证只在单机使用就不会触发检测或处罚。请勿在联机、排位、赛事中运行；进入这些模式前关闭修改器。有关处罚和干扰检测，请阅读[官方封禁说明](https://support.ageofempires.com/hc/en-us/articles/360047397872-Age-of-Empires-II-Definitive-Edition-ban)及[官方 Tampering Detected 说明](https://support.ageofempires.com/hc/en-us/articles/28006568546708-Tampering-Detected-A-running-process-may-be-interfering-with-the-correct-operation-of-AoE2-DE)。
 - 游戏更新后可能立即失效。若版本不符，修改器会拒绝连接；请查看对应版本的发布说明。
 - EXE 没有数字签名；不要为了运行它而关闭杀毒软件或系统防护。
-- 图标与封面嵌入在发布 EXE 中，但图片源文件不上传。无图片时可按[构建说明](BUILDING.md)编译功能相同但无自定义图像的程序；因此仓库中的材料不足以逐字节重现发布 EXE。游戏名称、标志及相关美术归各自权利人所有。
-- 已对功能进行单人战局手动验证，但加固发布包尚未完成完整游戏内回归测试。
+- 已对功能进行单人战局手动验证。
 
 如需反馈，请在 Issue 中提供游戏 Build、修改器版本、复现步骤和错误现象；不要上传个人信息、存档或含敏感数据的日志。
 
@@ -74,7 +73,5 @@ This trainer is for **single-player use only**. It modifies the running game's m
 - **Account safety is not guaranteed.** The game publisher says cheating can result in account sanctions, potentially including loss of chat, multiplayer, or game access for severe or repeated violations. The game may also show a “Tampering Detected” warning. We have no official exemption for single-player trainers and cannot guarantee that single-player use is undetected or free of account consequences. Never run the trainer in multiplayer, ranked play, or tournaments; close it before entering those modes. See the [official ban guidance](https://support.ageofempires.com/hc/en-us/articles/360047397872-Age-of-Empires-II-Definitive-Edition-ban) and [tampering guidance](https://support.ageofempires.com/hc/en-us/articles/28006568546708-Tampering-Detected-A-running-process-may-be-interfering-with-the-correct-operation-of-AoE2-DE).
 - A game update may break compatibility immediately. The trainer refuses to attach when the executable file version does not match; check the corresponding release notes.
 - The EXE is unsigned. Do not disable antivirus or system protections to run it.
-- The icon and cover art remain embedded in the Release EXE, but the image source files are not uploaded. [Build instructions](BUILDING.md) can produce a functional image-free build; the public repository therefore cannot reproduce the exact Release EXE byte for byte. Game names, logos, and artwork belong to their respective owners.
-- Features have been manually checked in a single-player match, but the protected release package has not yet received a full in-game regression test.
-
+- Features have been manually checked in a single-player match.
 For bug reports, open an Issue with the game build, trainer version, reproduction steps, and symptoms. Do not post personal data, save files, or sensitive logs.
