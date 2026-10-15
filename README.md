@@ -1,8 +1,8 @@
 # Age of Empires II: Definitive Edition — Build 185872 Unofficial Trainer (+11)
 
-[中文](#中文) · [English](#english)
+[中文说明](#中文说明) · [Introduce](#Introduce)
 
-## 中文
+## 中文说明
 
 > **非官方说明：** 风灵月影（FLiNG）官网目前列出的版本为 Build 169652，且我们在本机发现该版本未能适配游戏 Build 185872。本项目因此参考其修改器的界面布局与操作方式，独立制作了针对 Build 185872 的版本。它不是风灵月影官方作品，与风灵月影、Microsoft 或 World's Edge 均无隶属、合作或认可关系。请勿将本项目当作官方更新。 [风灵月影官网页面](https://flingtrainer.com/trainer/age-of-empires-ii-definitive-edition-trainer/)
 
@@ -43,7 +43,7 @@
 
 如需反馈，请在 Issue 中提供游戏 Build、修改器版本、复现步骤和错误现象；不要上传个人信息、存档或含敏感数据的日志。
 
-## English
+## Introduce
 
 > **Unofficial project:** The latest build listed on FLiNG's [official trainer page](https://flingtrainer.com/trainer/age-of-empires-ii-definitive-edition-trainer/) is Build 169652, which did not work with game Build 185872 in our local testing. This independently written trainer for Build 185872 takes inspiration from FLiNG's UI layout and workflow. It is **not** an official FLiNG release and is not affiliated with, endorsed by, or sponsored by FLiNG, Microsoft, or World's Edge.
 
