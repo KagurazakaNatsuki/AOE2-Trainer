@@ -30,8 +30,6 @@ This Trainer is free to use!
 | Num + | 最大人口上限设为 200 |
 | Num - | 当前人口设为 0 |
 
-游戏速度功能因不稳定已移除。仓库公开[主程序源码](AoE2DELatestTrainer.cs)、[构建脚本](Build.ps1)与[管理员权限清单](admin.manifest)，供审阅。发布页提供经过 .NET 混淆处理的 EXE；仓库不包含诊断工具、原版风灵月影修改器或游戏文件。
-
 ### 风险与限制
 
 - **请先备份存档，风险自担。** 内存修改可能导致游戏闪退、异常数值或存档问题；本工具不提供稳定性保证。
@@ -68,8 +66,6 @@ This trainer is for **single-player use only**. It modifies the running game's m
 | Num 0 | Set AI units and buildings to 1 HP |
 | Num + | Set maximum population cap to 200 |
 | Num - | Set current population to 0 |
-
-The game-speed option was removed because it was unstable. The repository includes the [main source](AoE2DELatestTrainer.cs), [build script](Build.ps1), and [administrator manifest](admin.manifest) for review. The Release EXE is .NET-obfuscated. Diagnostic tools, the original FLiNG trainer, and game files are not included.
 
 ### Risks and limitations
 
