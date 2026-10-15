@@ -2,7 +2,8 @@
 
 [中文说明](#中文说明) · [Introduce](#Introduce)
 
-该修改器是免费使用的!This Trainer is free to use!
+该修改器是免费使用的!
+This Trainer is free to use!
 
 ## 中文说明
 
