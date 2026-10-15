@@ -2,6 +2,8 @@
 
 [中文说明](#中文说明) · [Introduce](#Introduce)
 
+该修改器是免费使用的!This Trainer is free to use!
+
 ## 中文说明
 
 > **非官方说明：** 风灵月影（FLiNG）官网目前列出的版本为 Build 169652，且我们在本机发现该版本未能适配游戏 Build 185872。本项目因此参考其修改器的界面布局与操作方式，独立制作了针对 Build 185872 的版本。它不是风灵月影官方作品，与风灵月影、Microsoft 或 World's Edge 均无隶属、合作或认可关系。请勿将本项目当作官方更新。 [风灵月影官网页面](https://flingtrainer.com/trainer/age-of-empires-ii-definitive-edition-trainer/)
