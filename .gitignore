@@ -1,0 +1,11 @@
+build/
+*.exe
+*.dll
+*.pdb
+*.webp
+*.png
+*.ico
+*.zip
+*.CT
+*.bin
+*.log
