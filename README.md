@@ -5,6 +5,8 @@
 该修改器是免费使用的!
 This Trainer is free to use!
 
+![image](https://github.com/KagurazakaNatsuki/AOE2-Trainer/blob/main/Trainer.png)
+
 ## 中文说明
 
 > **非官方说明：** 本项目参考风灵月影（FLiNG）修改器的界面风格与操作方式，主程序独立编写。它不是风灵月影官方作品，与风灵月影、Microsoft 或 World's Edge 均无隶属、合作或认可关系，请勿当作官方更新。
