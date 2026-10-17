@@ -11,10 +11,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-[assembly: AssemblyTitle("Age of Empires II Definitive Edition Plus 12 Trainer V2")]
+[assembly: AssemblyTitle("Age of Empires II Definitive Edition Plus 12 Trainer V2.1")]
 [assembly: AssemblyDescription("Single-player trainer for AoE2DE 101.103.54800.0")]
 [assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.2")]
+[assembly: AssemblyFileVersion("1.0.0.3")]
 
 internal static class Native
 {
@@ -51,8 +51,10 @@ internal static class Engine
 {
     const ulong K1=0x6AE24D3352F04511UL,K2=0xC22D6B496D833977UL,K3=0x042AC42976FCCEF5UL,K4=0xA9834B738A7DD167UL;
     const ulong HX=0x0F2A55F7A61DD00EUL,HS=0x147B5E081EC087D9UL;
-    internal const ulong UnitVtableRva=0x32B8270UL,BuildingVtableRva=0x32B5FC8UL;
+    internal const ulong UnitVtableRva=0x32B8270UL,BuildingVtableRva=0x32B5FC8UL,ResearchActionVtableRva=0x3228798UL;
     const ulong SpeedManagerOffset=0x8UL,SpeedSettingsOffset=0x228UL,SpeedValuesOffset=0xCUL;
+    const ulong BuildingQueueOffset=0x8A8UL,QueueFirstNodeOffset=0x10UL,RecruitElapsedOffset=0x6CUL,ResearchIdOffset=0x68UL,ResearchElapsedOffset=0x70UL;
+    const uint RecruitActionKind=0x66,ResearchActionKind=0x67;
     const int Chunk=4*1024*1024;
     static readonly object CacheLock=new object();
     static int cachedPid;
@@ -210,9 +212,33 @@ internal static class Engine
     {
         using(GameContext c=Open(true)){int u=0,b=0;foreach(GameObjectInfo o in ScanObjectsFast(c)){if(o.PlayerId<1||o.PlayerId>8||o.Owner==c.Player||o.Health<=0)continue;try{ulong raw=U64(c.Handle,o.Address+0x130);Write(c.Handle,o.Address+0x130,BitConverter.GetBytes(EncodeHealth(raw,1f)));if(o.Unit)u++;else b++;}catch{}}return string.Format("AI 已设为 1 血：{0} 个单位、{1} 栋建筑",u,b);}
     }
-    internal static int FinishQueues(GameContext c,List<ulong> buildings,out int active)
+    internal static int FinishQueues(GameContext c,List<ulong> buildings,uint expectedKind,ulong elapsedOffset,float completionElapsed,out int active)
     {
-        int n=0;active=0;foreach(ulong building in buildings){ulong queue,node,action;if(!TryU64(c.Handle,building+0x8A8,out queue)||queue==0||!TryU64(c.Handle,queue+0x10,out node)||node==0||!TryU64(c.Handle,node,out action)||action==0)continue;uint type;if(!TryU32(c.Handle,action+8,out type)||(type&0xFFFF)!=0x66)continue;active++;uint raw;if(!TryU32(c.Handle,action+0x6C,out raw))continue;float elapsed=BitConverter.ToSingle(BitConverter.GetBytes(raw),0);if(float.IsNaN(elapsed)||elapsed>=1000f)continue;Write(c.Handle,action+0x6C,BitConverter.GetBytes(100000f));n++;}return n;
+        int written=0;active=0;
+        foreach(ulong building in buildings)
+        {
+            ulong queue,node,action;
+            if(!TryU64(c.Handle,building+BuildingQueueOffset,out queue)||queue<0x10000||
+               !TryU64(c.Handle,queue+QueueFirstNodeOffset,out node)||node<0x10000||
+               !TryU64(c.Handle,node,out action)||action<0x10000)continue;
+            uint kind;
+            if(!TryU32(c.Handle,action+8,out kind)||(kind&0xFFFF)!=expectedKind)continue;
+            if(expectedKind==ResearchActionKind)
+            {
+                ulong vtable;uint techId;
+                if(!TryU64(c.Handle,action,out vtable)||vtable!=c.ModuleBase+ResearchActionVtableRva||
+                   !TryU32(c.Handle,action+ResearchIdOffset,out techId)||techId==0||techId>10000)continue;
+            }
+            active++;
+            uint raw;ulong currentAction;
+            if(!TryU32(c.Handle,action+elapsedOffset,out raw)||
+               !TryU64(c.Handle,node,out currentAction)||currentAction!=action)continue;
+            float elapsed=BitConverter.ToSingle(BitConverter.GetBytes(raw),0);
+            if(float.IsNaN(elapsed)||float.IsInfinity(elapsed)||elapsed<0||elapsed>=1000f)continue;
+            Write(c.Handle,action+elapsedOffset,BitConverter.GetBytes(completionElapsed));
+            written++;
+        }
+        return written;
     }
     internal static List<ulong> PlayerBuildings(GameContext c){var x=new List<ulong>();foreach(GameObjectInfo o in ScanObjectsFast(c))if(o.Owner==c.Player&&!o.Unit)x.Add(o.Address);return x;}
     internal static string InstantRecruitOnce()
@@ -220,7 +246,7 @@ internal static class Engine
         using(GameContext c=Open(true))
         {
             List<ulong> buildings=PlayerBuildings(c);int total=0,idle=0;DateTime end=DateTime.UtcNow.AddMinutes(2);
-            while(DateTime.UtcNow<end&&idle<8){int active;total+=FinishQueues(c,buildings,out active);if(active==0)idle++;else idle=0;Thread.Sleep(25);}
+            while(DateTime.UtcNow<end&&idle<8){int active;total+=FinishQueues(c,buildings,RecruitActionKind,RecruitElapsedOffset,100000f,out active);if(active==0)idle++;else idle=0;Thread.Sleep(25);}
             return total==0?"当前没有生产队列":"当前生产队列已全部完成（处理 "+total+" 项）";
         }
     }
@@ -228,7 +254,24 @@ internal static class Engine
     {
         using(GameContext c=Open(true))
         {
-            SetResource(c,86,0.001f);try{Thread.Sleep(1500);return "当前研发队列已执行";}finally{SetResource(c,86,1f);}
+            List<ulong> buildings=PlayerBuildings(c);
+            float original=Resource(c,86);
+            if(float.IsNaN(original)||float.IsInfinity(original)||original<=0||original>100)
+                throw new InvalidOperationException("研发速度原值未通过校验，未修改。");
+            int total=0;
+            SetResource(c,86,0.001f);
+            try
+            {
+                DateTime end=DateTime.UtcNow.AddMilliseconds(1500);
+                do
+                {
+                    int active;
+                    total+=FinishQueues(c,buildings,ResearchActionKind,ResearchElapsedOffset,1000f,out active);
+                    Thread.Sleep(25);
+                }while(DateTime.UtcNow<end);
+                return "当前研发队列已执行（直接完成 "+total+" 项）";
+            }
+            finally{SetResource(c,86,original);}
         }
     }
     internal static string InstantBuildingsOnce()
@@ -331,7 +374,7 @@ internal sealed class TrainerForm : Form
 
     internal TrainerForm()
     {
-        Text="Age of Empires II: Definitive Edition +12 Trainer V2";ClientSize=new Size(790,680);FormBorderStyle=FormBorderStyle.FixedSingle;MaximizeBox=false;StartPosition=FormStartPosition.CenterScreen;BackColor=Dark;ForeColor=Color.Gainsboro;Font=new Font("Microsoft YaHei UI",9.5f);
+        Text="Age of Empires II: Definitive Edition +12 Trainer V2.1";ClientSize=new Size(790,680);FormBorderStyle=FormBorderStyle.FixedSingle;MaximizeBox=false;StartPosition=FormStartPosition.CenterScreen;BackColor=Dark;ForeColor=Color.Gainsboro;Font=new Font("Microsoft YaHei UI",9.5f);
         using(Stream stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("AoE.Icon"))if(stream!=null)Icon=new Icon(stream);
         speedToggle.Click+=delegate{ToggleSpeed();};speed.ValueChanged+=delegate{speedEditor.Text=FormatSpeed();UpdateActiveSpeed();};
         speedEditor.Leave+=delegate{CommitSpeedEditor();};
@@ -345,7 +388,7 @@ internal sealed class TrainerForm : Form
         Controls.Clear();
         var header=new Panel{Dock=DockStyle.Top,Height=70,BackColor=Color.FromArgb(28,30,31)};Controls.Add(header);
         header.Controls.Add(new Label{Text="Age of Empires II: Definitive Edition",ForeColor=Orange,Font=new Font(Font.FontFamily,15,FontStyle.Bold),AutoSize=true,Location=new Point(68,12)});
-        header.Controls.Add(new Label{Text="v101.103.54800.0 - Build 185872 V2  Plus 12 Trainer",ForeColor=Color.Gainsboro,Font=new Font(Font.FontFamily,10,FontStyle.Bold),AutoSize=true,Location=new Point(94,39)});
+        header.Controls.Add(new Label{Text="v101.103.54800.0 - Build 185872 V2.1  Plus 12 Trainer",ForeColor=Color.Gainsboro,Font=new Font(Font.FontFamily,10,FontStyle.Bold),AutoSize=true,Location=new Point(94,39)});
         AddLanguage(header,"简体",0,570);AddLanguage(header,"繁體",1,625);AddLanguage(header,"English",2,680);
 
         var left=new Panel{Location=new Point(6,74),Size=new Size(220,598),BackColor=PanelColor};Controls.Add(left);
