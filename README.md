@@ -5,7 +5,7 @@
 该修改器是免费使用的!
 This Trainer is free to use!
 
-![image](https://github.com/KagurazakaNatsuki/AOE2-Trainer/blob/main/Trainer.png)
+![image](https://github.com/KagurazakaNatsuki/AOE2-Trainer/blob/main/TrainerMenu.png)
 
 ## 中文说明
 
