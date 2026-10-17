@@ -1,4 +1,4 @@
-# Age of Empires II: Definitive Edition — Unofficial Trainer (+11)
+# Age of Empires II: Definitive Edition — Unofficial Trainer (+12)
 
 [中文说明](#中文说明) · [Introduce](#introduce)
 
@@ -29,8 +29,10 @@ This Trainer is free to use!
 | Num 8 | 瞬间建造（一次） |
 | Num 9 | 瞬间生产单位（一次） |
 | Num 0 | 将 AI 单位与建筑设为 1 血 |
+| Num . | 游戏速度（0.5–10 倍）开关 |
 | Num + | 最大人口上限设为 200 |
 | Num - | 当前人口设为 0 |
+| Ctrl+Shift+Home | 启用／关闭功能快捷键（默认启用） |
 
 ### 风险与限制
 
@@ -65,8 +67,10 @@ This trainer is for **single-player use only**. It modifies the running game's m
 | Num 8 | Instant buildings (once) |
 | Num 9 | Instant recruit units (once) |
 | Num 0 | Set AI units and buildings to 1 HP |
+| Num . | Toggle game speed (0.5–10×) |
 | Num + | Set maximum population cap to 200 |
 | Num - | Set current population to 0 |
+| Ctrl+Shift+Home | Enable/disable feature hotkeys (enabled by default) |
 
 ### Risks and limitations
 
