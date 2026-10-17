@@ -18,7 +18,7 @@ if (-not (Test-Path -LiteralPath $source) -or -not (Test-Path -LiteralPath $mani
 
 $outputDirectoryPath = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Path $outputDirectoryPath -Force | Out-Null
-$outputFile = Join-Path $outputDirectoryPath 'AoE2DE.Plus11.exe'
+$outputFile = Join-Path $outputDirectoryPath 'AoE2DE.Plus12.exe'
 $arguments = @(
     '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
     '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll',
