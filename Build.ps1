@@ -11,9 +11,10 @@ if (-not (Test-Path -LiteralPath $compiler)) {
 }
 
 $source = Join-Path $PSScriptRoot 'AoE2DELatestTrainer.cs'
+$localization = Join-Path $PSScriptRoot 'Localization.cs'
 $manifest = Join-Path $PSScriptRoot 'admin.manifest'
-if (-not (Test-Path -LiteralPath $source) -or -not (Test-Path -LiteralPath $manifest)) {
-    throw 'Source code or administrator manifest is missing.'
+if (-not (Test-Path -LiteralPath $source) -or -not (Test-Path -LiteralPath $localization) -or -not (Test-Path -LiteralPath $manifest)) {
+    throw 'Source code, localization, or administrator manifest is missing.'
 }
 
 $outputDirectoryPath = [IO.Path]::GetFullPath($OutputDirectory)
@@ -35,6 +36,7 @@ if ($CoverPath) {
     $arguments += "/resource:$cover,AoE.Cover"
 }
 $arguments += $source
+$arguments += $localization
 
 & $compiler @arguments
 if ($LASTEXITCODE -ne 0) { throw "Compiler failed with exit code $LASTEXITCODE" }

@@ -19,7 +19,7 @@ This Trainer is free to use!
 2. 启动游戏，进入**单人战局**，再以管理员身份运行修改器。主菜单中只能检测进程，进入战局后才会显示“已连接 / 就绪”。
 3. 木材、食物、黄金、石料分别输入数值并各自点击“应用”。其他功能也可用对应按钮或小键盘热键执行。
 4. “瞬间研发 / 建造 / 生产”是**一次性操作**，只处理当前任务或队列；下次使用需再点一次。
-5. 右上角可切换简体中文、繁體中文和 English。
+5. 右上角的语言下拉菜单支持简体中文、繁體中文、English、Русский、Español、日本語、العربية、Français、Deutsch 和 한국어。启动时按系统界面语言自动选择；未适配的语言默认 English。
 
 | 热键 | 功能 |
 | --- | --- |
@@ -33,6 +33,7 @@ This Trainer is free to use!
 | Num + | 最大人口上限设为 200 |
 | Num - | 当前人口设为 0 |
 | Ctrl+Shift+Home | 启用／关闭功能快捷键（默认启用） |
+| — | 提示音开关（左下角，默认开启；操作成功与关闭开关使用不同提示音） |
 
 ### 风险与限制
 
@@ -57,7 +58,7 @@ This trainer is for **single-player use only**. It modifies the running game's m
 2. Start the game and enter a **single-player match**, then run the trainer as administrator. Process detection in the main menu is normal; the trainer becomes ready after entering a match.
 3. Enter and apply wood, food, gold, and stone amounts **separately**. Other features have individual buttons and numpad hotkeys.
 4. Instant research, building, and recruitment are **one-shot actions** on current tasks or queues. Click again for later tasks.
-5. Switch between Simplified Chinese, Traditional Chinese, and English in the top-right corner.
+5. The top-right dropdown supports Simplified Chinese, Traditional Chinese, English, Russian, Spanish, Japanese, Arabic, French, German, and Korean. The trainer selects the Windows UI language on startup; unsupported languages default to English.
 
 | Hotkey | Feature |
 | --- | --- |
@@ -71,6 +72,7 @@ This trainer is for **single-player use only**. It modifies the running game's m
 | Num + | Set maximum population cap to 200 |
 | Num - | Set current population to 0 |
 | Ctrl+Shift+Home | Enable/disable feature hotkeys (enabled by default) |
+| — | Sound effects toggle (bottom-left, on by default; distinct cues for successful actions and disabling a toggle) |
 
 ### Risks and limitations
 

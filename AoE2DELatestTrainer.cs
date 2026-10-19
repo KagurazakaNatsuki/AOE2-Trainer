@@ -11,10 +11,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-[assembly: AssemblyTitle("Age of Empires II Definitive Edition Plus 12 Trainer V2.1")]
+[assembly: AssemblyTitle("Age of Empires II Definitive Edition Plus 12 Trainer V3")]
 [assembly: AssemblyDescription("Single-player trainer for AoE2DE 101.103.54800.0")]
 [assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.3")]
+[assembly: AssemblyFileVersion("1.0.0.4")]
 
 internal static class Native
 {
@@ -256,7 +256,8 @@ internal static class Engine
         {
             List<ulong> buildings=PlayerBuildings(c);
             float original=Resource(c,86);
-            if(float.IsNaN(original)||float.IsInfinity(original)||original<=0||original>100)
+            // Campaign scenarios may use 0 as their normal baseline while research still progresses.
+            if(float.IsNaN(original)||float.IsInfinity(original)||original<0||original>100)
                 throw new InvalidOperationException("研发速度原值未通过校验，未修改。");
             int total=0;
             SetResource(c,86,0.001f);
@@ -310,14 +311,15 @@ internal sealed class SpeedToggleSwitch : Control
         e.Graphics.Clear(BackColor);
         e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
         Color track=isOn?Color.FromArgb(255,140,0):Color.FromArgb(17,18,19);
+        int trackHeight=Height-2,thumbSize=Height-6;
         using(var brush=new SolidBrush(track))
         {
-            e.Graphics.FillEllipse(brush,0,1,22,22);
-            e.Graphics.FillRectangle(brush,11,1,30,22);
-            e.Graphics.FillEllipse(brush,30,1,22,22);
+            e.Graphics.FillEllipse(brush,0,1,trackHeight,trackHeight);
+            e.Graphics.FillRectangle(brush,trackHeight/2,1,Width-trackHeight,trackHeight);
+            e.Graphics.FillEllipse(brush,Width-trackHeight,1,trackHeight,trackHeight);
         }
         using(var brush=new SolidBrush(Color.Gainsboro))
-            e.Graphics.FillEllipse(brush,isOn?30:2,3,18,18);
+            e.Graphics.FillEllipse(brush,isOn?Width-Height+2:2,3,thumbSize,thumbSize);
     }
 }
 
@@ -359,10 +361,70 @@ internal sealed class RoundedApplyButton : Control
     protected override void OnMouseUp(MouseEventArgs e){pressed=false;Invalidate();base.OnMouseUp(e);}
 }
 
+internal static class AudioFeedback
+{
+    static readonly object Gate=new object();
+    static System.Media.SoundPlayer successPlayer,disablePlayer;
+
+    internal static void Success(){Play(true);}
+    internal static void Disable(){Play(false);}
+
+    static void Play(bool success)
+    {
+        try
+        {
+            lock(Gate)
+            {
+                if(success)
+                {
+                    if(successPlayer==null)successPlayer=new System.Media.SoundPlayer(new MemoryStream(CreateWave(true),false));
+                    successPlayer.Play();
+                }
+                else
+                {
+                    if(disablePlayer==null)disablePlayer=new System.Media.SoundPlayer(new MemoryStream(CreateWave(false),false));
+                    disablePlayer.Play();
+                }
+            }
+        }
+        catch { /* Audio must never prevent the trainer action from succeeding. */ }
+    }
+
+    internal static byte[] CreateWave(bool success)
+    {
+        const int rate=24000;
+        double duration=success?0.34:0.23;
+        int samples=(int)(rate*duration);
+        using(var stream=new MemoryStream(44+samples*2))
+        using(var writer=new BinaryWriter(stream))
+        {
+            writer.Write(System.Text.Encoding.ASCII.GetBytes("RIFF"));writer.Write(36+samples*2);
+            writer.Write(System.Text.Encoding.ASCII.GetBytes("WAVEfmt "));writer.Write(16);
+            writer.Write((short)1);writer.Write((short)1);writer.Write(rate);writer.Write(rate*2);
+            writer.Write((short)2);writer.Write((short)16);
+            writer.Write(System.Text.Encoding.ASCII.GetBytes("data"));writer.Write(samples*2);
+            for(int i=0;i<samples;i++)
+            {
+                double t=(double)i/rate;
+                double attack=Math.Min(1,t/0.006),release=Math.Min(1,(duration-t)/0.035);
+                double phase=2*Math.PI*(460*t-180*t*t);
+                double tone=success?
+                    0.70*Math.Sin(2*Math.PI*1047*t)+0.22*Math.Sin(2*Math.PI*2094*t)+0.08*Math.Sin(2*Math.PI*3141*t):
+                    0.85*Math.Sin(phase)+0.15*Math.Sin(2*phase);
+                double envelope=attack*Math.Max(0,release)*Math.Exp(-t/(success?0.14:0.35));
+                writer.Write((short)(tone*envelope*(success?0.14:0.12)*short.MaxValue));
+            }
+            return stream.ToArray();
+        }
+    }
+}
+
 internal sealed class TrainerForm : Form
 {
     readonly Color Dark=Color.FromArgb(30,32,34),PanelColor=Color.FromArgb(35,37,39),Orange=Color.FromArgb(255,140,0);
-    readonly Label processInfo=new Label(),status=new Label(),hotkeyHint=new Label();
+    readonly Label processInfo=new Label(),status=new Label(),hotkeyHint=new Label(),soundLabel=new Label();
+    readonly SpeedToggleSwitch soundToggle=new SpeedToggleSwitch{IsOn=true,Size=new Size(36,18)};
+    readonly Image coverImage;
     readonly SpeedToggleSwitch speedToggle=new SpeedToggleSwitch();
     readonly TextBox speedEditor=new TextBox();
     readonly NumericUpDown wood=ResourceBox(),food=ResourceBox(),gold=ResourceBox(),stone=ResourceBox(),speed=SpeedBox();
@@ -374,29 +436,57 @@ internal sealed class TrainerForm : Form
 
     internal TrainerForm()
     {
-        Text="Age of Empires II: Definitive Edition +12 Trainer V2.1";ClientSize=new Size(790,680);FormBorderStyle=FormBorderStyle.FixedSingle;MaximizeBox=false;StartPosition=FormStartPosition.CenterScreen;BackColor=Dark;ForeColor=Color.Gainsboro;Font=new Font("Microsoft YaHei UI",9.5f);
+        Text="Age of Empires II: Definitive Edition +12 Trainer V3";ClientSize=new Size(790,680);FormBorderStyle=FormBorderStyle.FixedSingle;MaximizeBox=false;StartPosition=FormStartPosition.CenterScreen;BackColor=Dark;ForeColor=Color.Gainsboro;Font=new Font("Microsoft YaHei UI",9.5f);
+        language=LanguageForCulture(CultureInfo.CurrentUICulture);
         using(Stream stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("AoE.Icon"))if(stream!=null)Icon=new Icon(stream);
+        using(Stream stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("AoE.Cover"))if(stream!=null)using(Image image=Image.FromStream(stream))coverImage=new Bitmap(image);
         speedToggle.Click+=delegate{ToggleSpeed();};speed.ValueChanged+=delegate{speedEditor.Text=FormatSpeed();UpdateActiveSpeed();};
+        soundToggle.Click+=delegate{soundToggle.IsOn=!soundToggle.IsOn;};
         speedEditor.Leave+=delegate{CommitSpeedEditor();};
         speedEditor.KeyDown+=delegate(object sender,KeyEventArgs e){if(e.KeyCode==Keys.Enter){CommitSpeedEditor();e.Handled=true;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Escape){speedEditor.Text=FormatSpeed();e.Handled=true;e.SuppressKeyPress=true;}};
         BuildUi();detector.Interval=1000;detector.Tick+=delegate{DetectGame();};Shown+=delegate{RegisterKeys();detector.Start();DetectGame();};
     }
 
-    string T(string simplified,string traditional,string english){return language==0?simplified:(language==1?traditional:english);}
+    internal static int LanguageForCulture(CultureInfo culture)
+    {
+        string name=culture.Name.ToLowerInvariant();
+        if(name=="zh"||name.StartsWith("zh-hans")||name.StartsWith("zh-chs")||name.StartsWith("zh-cn")||name.StartsWith("zh-sg")||name.StartsWith("zh-my"))return 0;
+        if(name.StartsWith("zh-hant")||name.StartsWith("zh-cht")||name.StartsWith("zh-tw")||name.StartsWith("zh-hk")||name.StartsWith("zh-mo"))return 1;
+        switch(culture.TwoLetterISOLanguageName)
+        {
+            case "ru":return 3;
+            case "es":return 4;
+            case "ja":return 5;
+            case "ar":return 6;
+            case "fr":return 7;
+            case "de":return 8;
+            case "ko":return 9;
+        }
+        return 2;
+    }
+    string T(string simplified,string traditional,string english){return language==0?simplified:(language==1?traditional:Localization.Get(english,language));}
     void BuildUi()
     {
-        Controls.Clear();
+        SuspendLayout();
+        foreach(Control reused in new Control[]{processInfo,status,hotkeyHint,soundLabel,soundToggle,speedToggle,speedEditor,wood,food,gold,stone,speed})
+            if(reused.Parent!=null)reused.Parent.Controls.Remove(reused);
+        while(Controls.Count>0){Control old=Controls[0];Controls.RemoveAt(0);old.Dispose();}
         var header=new Panel{Dock=DockStyle.Top,Height=70,BackColor=Color.FromArgb(28,30,31)};Controls.Add(header);
         header.Controls.Add(new Label{Text="Age of Empires II: Definitive Edition",ForeColor=Orange,Font=new Font(Font.FontFamily,15,FontStyle.Bold),AutoSize=true,Location=new Point(68,12)});
-        header.Controls.Add(new Label{Text="v101.103.54800.0 - Build 185872 V2.1  Plus 12 Trainer",ForeColor=Color.Gainsboro,Font=new Font(Font.FontFamily,10,FontStyle.Bold),AutoSize=true,Location=new Point(94,39)});
-        AddLanguage(header,"简体",0,570);AddLanguage(header,"繁體",1,625);AddLanguage(header,"English",2,680);
+        header.Controls.Add(new Label{Text="v101.103.54800.0 - Build 185872 V3  Plus 12 Trainer",ForeColor=Color.Gainsboro,Font=new Font(Font.FontFamily,10,FontStyle.Bold),AutoSize=true,Location=new Point(94,39)});
+        AddLanguageSelector(header);
 
         var left=new Panel{Location=new Point(6,74),Size=new Size(220,598),BackColor=PanelColor};Controls.Add(left);
         var cover=new PictureBox{Location=new Point(0,0),Size=new Size(220,310),BackColor=Color.FromArgb(44,48,50),BorderStyle=BorderStyle.FixedSingle,SizeMode=PictureBoxSizeMode.StretchImage};left.Controls.Add(cover);
-        using(Stream stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("AoE.Cover"))if(stream!=null)using(Image image=Image.FromStream(stream))cover.Image=new Bitmap(image);
-        processInfo.Location=new Point(4,322);processInfo.Size=new Size(212,150);processInfo.ForeColor=Color.Silver;left.Controls.Add(processInfo);
-        left.Controls.Add(new Label{Text=T("适配 Build 185872\r\n仅限单机使用","適配 Build 185872\r\n僅限單機使用","Adapted for Build 185872\r\nSingle-player use only"),Location=new Point(4,500),Size=new Size(210,45),ForeColor=Color.Gray});
-        var projectLink=new LinkLabel{Text=T("项目主页：GitHub","專案首頁：GitHub","Project page: GitHub"),Location=new Point(4,545),AutoSize=true,LinkColor=Orange,ActiveLinkColor=Color.White,Font=new Font(Font.FontFamily,8.5f,FontStyle.Underline)};
+        cover.Image=coverImage;
+        processInfo.Location=new Point(4,322);processInfo.Size=new Size(212,108);processInfo.ForeColor=Color.Silver;
+        processInfo.RightToLeft=language==6?RightToLeft.Yes:RightToLeft.No;left.Controls.Add(processInfo);
+        soundLabel.Text=T("提示音","提示音","Sound effects");soundLabel.Location=new Point(4,429);
+        soundLabel.AutoSize=true;soundLabel.ForeColor=Color.Silver;soundLabel.RightToLeft=language==6?RightToLeft.Yes:RightToLeft.No;left.Controls.Add(soundLabel);
+        soundToggle.AccessibleName=T("提示音开关","提示音開關","Sound effects toggle");
+        soundToggle.Location=new Point(soundLabel.Right+6,428);left.Controls.Add(soundToggle);
+        left.Controls.Add(new Label{Text=T("适配 Build 185872\r\n仅限单机使用","適配 Build 185872\r\n僅限單機使用","Adapted for Build 185872\r\nSingle-player use only"),Location=new Point(4,497),Size=new Size(210,45),ForeColor=Color.Gray});
+        var projectLink=new LinkLabel{Text=T("项目主页：GitHub","專案首頁：GitHub","Project page: GitHub"),Location=new Point(4,542),AutoSize=true,LinkColor=Orange,ActiveLinkColor=Color.White,Font=new Font(Font.FontFamily,8.5f,FontStyle.Underline)};
         projectLink.LinkClicked+=delegate{try{Process.Start(new ProcessStartInfo("https://github.com/KagurazakaNatsuki/AOE2-Trainer"){UseShellExecute=true});}catch(Exception e){SetStatus(()=>T("无法打开项目主页：","無法開啟專案首頁：","Cannot open project page: ")+e.Message,true);}};
         left.Controls.Add(projectLink);
 
@@ -418,13 +508,39 @@ internal sealed class TrainerForm : Form
         AddSpeedRow(right,ref y);
         AddRow(right,ref y,"Num +",T("最大人口上限 200","最大人口上限 200","Max Population Cap: 200"),null,MaxPopulationAction);
         AddRow(right,ref y,"Num -",T("当前人口设为 0（无限人口）","當前人口設為 0（無限人口）","Set Population To 0 (Infinite Population)"),null,ZeroPopulationAction);
-        hotkeyHint.Location=new Point(0,493);hotkeyHint.Size=new Size(542,20);hotkeyHint.TextAlign=ContentAlignment.MiddleCenter;hotkeyHint.ForeColor=Color.Silver;right.Controls.Add(hotkeyHint);
-        status.Location=new Point(0,520);status.Size=new Size(542,54);status.BorderStyle=BorderStyle.FixedSingle;status.Padding=new Padding(8);status.ForeColor=Color.Silver;right.Controls.Add(status);
+        hotkeyHint.Location=new Point(0,493);hotkeyHint.Size=new Size(542,20);hotkeyHint.TextAlign=ContentAlignment.MiddleCenter;hotkeyHint.ForeColor=Color.Silver;
+        hotkeyHint.RightToLeft=language==6?RightToLeft.Yes:RightToLeft.No;right.Controls.Add(hotkeyHint);
+        status.Location=new Point(0,520);status.Size=new Size(542,54);status.BorderStyle=BorderStyle.FixedSingle;status.Padding=new Padding(8);status.ForeColor=Color.Silver;
+        status.RightToLeft=language==6?RightToLeft.Yes:RightToLeft.No;right.Controls.Add(status);
         UpdateProcessInfo();UpdateSpeedToggle();UpdateHotkeyHint();
         if(statusMessage==null)SetStatus(()=>T("等待游戏进程……","等待遊戲進程……","Waiting for game process..."));else RenderStatus();
+        ResumeLayout(true);
     }
 
-    void AddLanguage(Panel header,string text,int id,int x){var l=new LinkLabel{Text=(language==id?"● ":"○ ")+text,LinkColor=language==id?Orange:Color.Gainsboro,ActiveLinkColor=Orange,AutoSize=true,Location=new Point(x,25),Font=new Font(Font.FontFamily,9,language==id?FontStyle.Bold:FontStyle.Regular)};l.LinkClicked+=delegate{language=id;BuildUi();};header.Controls.Add(l);}
+    void AddLanguageSelector(Panel header)
+    {
+        // English language names A–Z; values remain stable language IDs for translations.
+        int[] displayOrder={6,0,1,2,7,8,5,9,3,4};
+        header.Controls.Add(new Label{Text=T("语言选择：","語言選擇：","Language:"),ForeColor=Color.Gainsboro,
+            Location=new Point(552,23),Size=new Size(88,27),TextAlign=ContentAlignment.MiddleRight,Font=new Font(Font.FontFamily,9,FontStyle.Bold)});
+        var selector=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,FlatStyle=FlatStyle.Flat,
+            DrawMode=DrawMode.OwnerDrawFixed,ItemHeight=22,MaxDropDownItems=10,Location=new Point(646,23),Size=new Size(132,27),
+            BackColor=PanelColor,ForeColor=Color.Gainsboro,Font=new Font(Font.FontFamily,9)};
+        selector.Items.AddRange(new object[]{"العربية","简体中文","繁體中文","English","Français","Deutsch","日本語","한국어","Русский","Español"});
+        selector.DrawItem+=delegate(object sender,DrawItemEventArgs e)
+        {
+            if(e.Index<0)return;
+            bool selected=selector.DroppedDown&&(e.State&DrawItemState.Selected)!=0;
+            using(var background=new SolidBrush(selected?Color.FromArgb(55,58,61):PanelColor))e.Graphics.FillRectangle(background,e.Bounds);
+            TextRenderer.DrawText(e.Graphics,selector.GetItemText(selector.Items[e.Index]),selector.Font,
+                new Rectangle(e.Bounds.X+7,e.Bounds.Y,e.Bounds.Width-7,e.Bounds.Height),Color.Gainsboro,
+                TextFormatFlags.VerticalCenter|(e.Index==0?TextFormatFlags.Right:TextFormatFlags.Left)|TextFormatFlags.SingleLine|
+                (e.Index==0?TextFormatFlags.RightToLeft:TextFormatFlags.Default));
+        };
+        selector.SelectedIndex=Array.IndexOf(displayOrder,language);
+        selector.SelectedIndexChanged+=delegate{if(selector.SelectedIndex<0||displayOrder[selector.SelectedIndex]==language)return;language=displayOrder[selector.SelectedIndex];BeginInvoke((Action)BuildUi);};
+        header.Controls.Add(selector);
+    }
 
     static NumericUpDown ResourceBox(){return new NumericUpDown{Minimum=0,Maximum=99999999,Value=999999,Increment=1000,Size=new Size(92,24),ForeColor=Color.Orange,BackColor=Color.FromArgb(30,32,34),BorderStyle=BorderStyle.FixedSingle,TextAlign=HorizontalAlignment.Center};}
     static NumericUpDown SpeedBox(){return new NumericUpDown{Minimum=0.5m,Maximum=10m,Value=1.7m,Increment=0.1m,DecimalPlaces=2};}
@@ -432,7 +548,7 @@ internal sealed class TrainerForm : Form
     {
         p.Controls.Add(new Label{Text="Num .",Font=new Font(Font.FontFamily,9.5f,FontStyle.Bold),Location=new Point(5,y+4),Size=new Size(105,24)});
         speedToggle.Location=new Point(118,y);p.Controls.Add(speedToggle);
-        p.Controls.Add(new Label{Text=T("游戏速度（0.5–10 倍）","遊戲速度（0.5–10 倍）","Game Speed (0.5–10x)"),Location=new Point(178,y+3),Size=new Size(235,24),Font=new Font(Font.FontFamily,9.5f,FontStyle.Bold)});
+        p.Controls.Add(new Label{Text=T("游戏速度（0.5–10 倍）","遊戲速度（0.5–10 倍）","Game Speed (0.5–10x)"),Location=new Point(178,y+3),Size=new Size(235,24),Font=new Font(Font.FontFamily,9.5f,FontStyle.Bold),RightToLeft=language==6?RightToLeft.Yes:RightToLeft.No,TextAlign=language==6?ContentAlignment.MiddleRight:ContentAlignment.MiddleLeft});
         var less=new Label{Text="<",Location=new Point(420,y-2),Size=new Size(20,27),ForeColor=Orange,Font=new Font(Font.FontFamily,15,FontStyle.Regular),TextAlign=ContentAlignment.MiddleCenter,Cursor=Cursors.Hand};
         less.Click+=delegate{ChangeSpeed(-0.1m);};p.Controls.Add(less);
         speedEditor.Location=new Point(442,y+3);speedEditor.Size=new Size(48,22);speedEditor.BorderStyle=BorderStyle.None;speedEditor.TextAlign=HorizontalAlignment.Center;speedEditor.BackColor=Dark;speedEditor.ForeColor=Orange;speedEditor.Font=new Font(Font.FontFamily,10,FontStyle.Regular);speedEditor.Text=FormatSpeed();p.Controls.Add(speedEditor);
@@ -486,7 +602,7 @@ internal sealed class TrainerForm : Form
                     Engine.SetGameSpeed(c,requested);
                     savedSpeed=original;speedPid=c.Game.Id;speedPlayer=c.Player;speedOverrideActive=true;
                 }
-                SetStatus(()=>T("游戏速度已开启：","遊戲速度已開啟：","Game speed enabled: ")+requested.ToString("0.##",CultureInfo.InvariantCulture)+"x");
+                SetStatus(()=>T("游戏速度已开启：","遊戲速度已開啟：","Game speed enabled: ")+requested.ToString("0.##",CultureInfo.InvariantCulture)+"x");PlaySuccessFeedback();
             }
             else
             {
@@ -495,11 +611,11 @@ internal sealed class TrainerForm : Form
                     if(c.Game.Id!=speedPid||c.Player!=speedPlayer)throw new InvalidOperationException("对局已改变，无法恢复先前速度。");
                     Engine.SetGameSpeed(c,savedSpeed);speedOverrideActive=false;
                 }
-                SetStatus(()=>T("已恢复对局原速度","已恢復對局原速度","Original game speed restored"));
+                SetStatus(()=>T("已恢复对局原速度","已恢復對局原速度","Original game speed restored"));PlayDisableFeedback();
             }
             UpdateSpeedToggle();
         }
-        catch(Exception e){SetStatus(()=>T("错误：","錯誤：","Error: ")+e.Message,true);}
+        catch(Exception e){string detail=e.Message;SetStatus(()=>T("错误：","錯誤：","Error: ")+Localization.Error(detail,language),true);}
     }
     void UpdateActiveSpeed()
     {
@@ -514,13 +630,13 @@ internal sealed class TrainerForm : Form
             }
             SetStatus(()=>T("游戏速度已设为 ","遊戲速度已設為 ","Game speed set to ")+requested.ToString("0.##",CultureInfo.InvariantCulture)+"x");
         }
-        catch(Exception e){SetStatus(()=>T("错误：","錯誤：","Error: ")+e.Message,true);}
+        catch(Exception e){string detail=e.Message;SetStatus(()=>T("错误：","錯誤：","Error: ")+Localization.Error(detail,language),true);}
     }
     void AddRow(Panel p,ref int y,string hotkey,string option,NumericUpDown value,Action action)
     {
         p.Controls.Add(new Label{Text=hotkey,Font=new Font(Font.FontFamily,9.5f,FontStyle.Bold),Location=new Point(5,y+4),Size=new Size(105,24)});
         var apply=new RoundedApplyButton{Text=T("应用","套用","APPLY"),Location=new Point(118,y)};apply.Click+=delegate{action();};p.Controls.Add(apply);
-        p.Controls.Add(new Label{Text=option,Location=new Point(178,y+3),Size=new Size(value==null?365:235,24),Font=new Font(Font.FontFamily,9.5f,FontStyle.Bold)});
+        p.Controls.Add(new Label{Text=option,Location=new Point(178,y+3),Size=new Size(value==null?365:235,24),Font=new Font(Font.FontFamily,9.5f,FontStyle.Bold),RightToLeft=language==6?RightToLeft.Yes:RightToLeft.No,TextAlign=language==6?ContentAlignment.MiddleRight:ContentAlignment.MiddleLeft});
         if(value!=null){value.Location=new Point(420,y);p.Controls.Add(value);}y+=34;
     }
     void SetResource(int id,Func<string> name,NumericUpDown box)
@@ -541,8 +657,8 @@ internal sealed class TrainerForm : Form
         SetStatus(()=>name()+T("处理中……","處理中……"," processing..."));
         Task.Run(delegate
         {
-            try{work();BeginInvoke((Action)delegate{SetStatus(success);});}
-            catch(Exception e){string detail=e.Message;BeginInvoke((Action)delegate{SetStatus(()=>T("错误：","錯誤：","Error: ")+detail,true);});}
+            try{work();BeginInvoke((Action)delegate{SetStatus(success);PlaySuccessFeedback();});}
+            catch(Exception e){string detail=e.Message;BeginInvoke((Action)delegate{SetStatus(()=>T("错误：","錯誤：","Error: ")+Localization.Error(detail,language),true);});}
         });
     }
     void SetStatus(Func<string> message,bool error=false)
@@ -555,6 +671,8 @@ internal sealed class TrainerForm : Form
         status.Text=statusTime.ToString("HH:mm:ss")+"  "+statusMessage();
         status.ForeColor=statusError?Color.Salmon:Color.LightGreen;
     }
+    void PlaySuccessFeedback(){if(soundToggle.IsOn)AudioFeedback.Success();}
+    void PlayDisableFeedback(){if(soundToggle.IsOn)AudioFeedback.Disable();}
     void DetectGame()
     {
         Process[] ps=Process.GetProcessesByName("AoE2DE_s");
@@ -598,7 +716,16 @@ internal sealed class TrainerForm : Form
             finally{hookBusy=false;}
         });
     }
-    void UpdateProcessInfo(){string state=detectedPid==0?T("等待游戏","等待遊戲","Waiting for game"):(hookedPid==detectedPid?T("已连接 / 就绪","已連接 / 就緒","Hooked / Ready"):T("已检测 / 等待进入战局","已偵測 / 等待進入戰局","Detected / waiting for match"));processInfo.Text=T("游戏进程名称：","遊戲程序名稱：","Game Process Name:")+"\r\nAoE2DE_s.exe\r\n\r\n"+T("进程 ID：","程序 ID：","Process ID: ")+(detectedPid==0?"--":detectedPid.ToString())+"\r\n\r\n"+T("状态：","狀態：","Status: ")+state;}
+    void UpdateProcessInfo()
+    {
+        bool waitingForMatch=detectedPid!=0&&hookedPid!=detectedPid;
+        string state=detectedPid==0?T("等待游戏","等待遊戲","Waiting for game"):(waitingForMatch?T("已检测 / 等待进入战局","已偵測 / 等待進入戰局","Detected / waiting for match"):T("已连接 / 就绪","已連接 / 就緒","Hooked / Ready"));
+        processInfo.Text=T("游戏进程名称：","遊戲程序名稱：","Game Process Name:")+"\r\nAoE2DE_s.exe\r\n\r\n"+T("进程 ID：","程序 ID：","Process ID: ")+(detectedPid==0?"--":detectedPid.ToString())+"\r\n"+T("状态：","狀態：","Status: ")+state;
+        processInfo.Height=waitingForMatch?129:108;
+        int soundY=processInfo.Bottom+4;
+        soundLabel.Location=new Point(4,soundY);
+        soundToggle.Location=new Point(soundLabel.Right+6,soundY-1);
+    }
     static readonly int[] FeatureKeys={0x61,0x62,0x63,0x64,0x66,0x67,0x68,0x69,0x60,0x6B,0x6D,0x6E};
     bool RegisterFeatureKeys(){bool ok=true;for(int i=0;i<FeatureKeys.Length;i++)ok&=Native.RegisterHotKey(Handle,i+1,0x4000,(uint)FeatureKeys[i]);return ok;}
     void UnregisterFeatureKeys(){for(int i=1;i<=FeatureKeys.Length;i++)Native.UnregisterHotKey(Handle,i);}
@@ -619,12 +746,14 @@ internal sealed class TrainerForm : Form
         {
             UnregisterFeatureKeys();hotkeysEnabled=false;
             SetStatus(()=>T("功能快捷键已关闭","功能快捷鍵已關閉","Feature hotkeys disabled"));
+            PlayDisableFeedback();
         }
         else
         {
             bool ok=RegisterFeatureKeys();hotkeysEnabled=true;
             SetStatus(ok?new Func<string>(()=>T("功能快捷键已启用","功能快捷鍵已啟用","Feature hotkeys enabled")):
                 new Func<string>(()=>T("部分热键注册失败，请关闭其他修改器。","部分熱鍵註冊失敗，請關閉其他修改器。","Some hotkeys failed; close other trainers.")),!ok);
+            if(ok)PlaySuccessFeedback();
         }
         UpdateHotkeyHint();
     }
@@ -632,7 +761,7 @@ internal sealed class TrainerForm : Form
     {
         detector.Stop();
         if(speedOverrideActive)try{using(GameContext c=Engine.Open(true))if(c.Game.Id==speedPid&&c.Player==speedPlayer)Engine.SetGameSpeed(c,savedSpeed);}catch{}
-        UnregisterFeatureKeys();Native.UnregisterHotKey(Handle,13);base.OnFormClosed(e);
+        UnregisterFeatureKeys();Native.UnregisterHotKey(Handle,13);base.OnFormClosed(e);if(coverImage!=null)coverImage.Dispose();
     }
     protected override void WndProc(ref Message m)
     {
