@@ -5,13 +5,14 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.IO;
+using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-[assembly: AssemblyTitle("Age of Empires II Definitive Edition Plus 12 Trainer V3")]
+[assembly: AssemblyTitle("Age of Empires II Definitive Edition Plus 12 Trainer")]
 [assembly: AssemblyDescription("Single-player trainer for AoE2DE 101.103.57257.0")]
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.5")]
@@ -423,10 +424,62 @@ internal static class AudioFeedback
     }
 }
 
+internal static class UpdateChecker
+{
+    // Keep this tag in sync with the release that produced the executable.
+    internal const string CurrentReleaseTag="v188329";
+    const string LatestReleaseUrl="https://github.com/KagurazakaNatsuki/AOE2-Trainer/releases/latest";
+    const string ReleaseTagPath="/KagurazakaNatsuki/AOE2-Trainer/releases/tag/";
+
+    internal static string FetchLatestTag()
+    {
+        ServicePointManager.SecurityProtocol|=SecurityProtocolType.Tls12;
+        var request=(HttpWebRequest)WebRequest.Create(LatestReleaseUrl);
+        request.UserAgent="AOE2-Trainer-UpdateChecker";
+        request.AllowAutoRedirect=false;
+        request.Timeout=5000;request.ReadWriteTimeout=5000;
+        using(var response=(HttpWebResponse)request.GetResponse())
+        {
+            if(response.StatusCode!=HttpStatusCode.Found)throw new FormatException("GitHub latest-release redirect is missing.");
+            string location=response.Headers["Location"];
+            Uri destination;
+            if(string.IsNullOrEmpty(location)||!Uri.TryCreate(new Uri(LatestReleaseUrl),location,out destination)||
+               destination.Scheme!=Uri.UriSchemeHttps||!destination.Host.Equals("github.com",StringComparison.OrdinalIgnoreCase)||
+               !destination.AbsolutePath.StartsWith(ReleaseTagPath,StringComparison.OrdinalIgnoreCase))
+                throw new FormatException("GitHub latest-release destination is invalid.");
+            string tag=Uri.UnescapeDataString(destination.AbsolutePath.Substring(ReleaseTagPath.Length));
+            if(tag.IndexOf('/')>=0)throw new FormatException("GitHub release tag is invalid.");
+            return tag;
+        }
+    }
+
+    // Release tags use v<game-build>[-V<trainer-revision>], e.g. v185872-V2.1.
+    // Negative: this executable is older; positive: local build is ahead of GitHub.
+    internal static int CompareCurrentToLatest(string current,string latest)
+    {
+        int[] a=ParseTag(current),b=ParseTag(latest);
+        for(int i=0;i<Math.Max(a.Length,b.Length);i++)
+        {
+            int left=i<a.Length?a[i]:0,right=i<b.Length?b[i]:0;
+            if(left!=right)return left>right?1:-1;
+        }
+        return 0;
+    }
+    static int[] ParseTag(string tag)
+    {
+        var match=System.Text.RegularExpressions.Regex.Match(tag,@"^v(?<build>\d+)(?:-V(?<revision>\d+(?:\.\d+)*))?$",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if(!match.Success)throw new FormatException("Unrecognized release tag.");
+        var parts=new List<int>{int.Parse(match.Groups["build"].Value,CultureInfo.InvariantCulture)};
+        if(match.Groups["revision"].Success)
+            foreach(string part in match.Groups["revision"].Value.Split('.'))parts.Add(int.Parse(part,CultureInfo.InvariantCulture));
+        return parts.ToArray();
+    }
+}
+
 internal sealed class TrainerForm : Form
 {
     readonly Color Dark=Color.FromArgb(30,32,34),PanelColor=Color.FromArgb(35,37,39),Orange=Color.FromArgb(255,140,0);
-    readonly Label processInfo=new Label(),status=new Label(),hotkeyHint=new Label(),soundLabel=new Label();
+    readonly Label processInfo=new Label(),status=new Label(),hotkeyHint=new Label(),soundLabel=new Label(),updateStatus=new Label();
     readonly SpeedToggleSwitch soundToggle=new SpeedToggleSwitch{IsOn=true,Size=new Size(36,18)};
     readonly Image coverImage;
     readonly SpeedToggleSwitch speedToggle=new SpeedToggleSwitch();
@@ -436,19 +489,22 @@ internal sealed class TrainerForm : Form
     int hookedPid,detectedPid,language,speedPid;bool hookBusy,hotkeysEnabled=true,speedOverrideActive;ulong speedPlayer;float savedSpeed;
     Func<string> statusMessage;DateTime statusTime;bool statusError;
     DateTime nextCacheRefresh=DateTime.MinValue,nextAttachAttempt=DateTime.MinValue;
+    enum UpdateCheckState{Checking,Current,Outdated,Unpublished,Unavailable}
+    UpdateCheckState updateCheckState=UpdateCheckState.Checking;bool updateCheckBusy,updateFlashOrange=true;
     const int WM_HOTKEY=0x0312;
 
     internal TrainerForm()
     {
-        Text="Age of Empires II: Definitive Edition +12 Trainer V3";ClientSize=new Size(790,680);FormBorderStyle=FormBorderStyle.FixedSingle;MaximizeBox=false;StartPosition=FormStartPosition.CenterScreen;BackColor=Dark;ForeColor=Color.Gainsboro;Font=new Font("Microsoft YaHei UI",9.5f);
+        Text="Age of Empires II: Definitive Edition +12 Trainer";ClientSize=new Size(790,680);FormBorderStyle=FormBorderStyle.FixedSingle;MaximizeBox=false;StartPosition=FormStartPosition.CenterScreen;BackColor=Dark;ForeColor=Color.Gainsboro;Font=new Font("Microsoft YaHei UI",9.5f);
         language=LanguageForCulture(CultureInfo.CurrentUICulture);
         using(Stream stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("AoE.Icon"))if(stream!=null)Icon=new Icon(stream);
         using(Stream stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("AoE.Cover"))if(stream!=null)using(Image image=Image.FromStream(stream))coverImage=new Bitmap(image);
         speedToggle.Click+=delegate{ToggleSpeed();};speed.ValueChanged+=delegate{speedEditor.Text=FormatSpeed();UpdateActiveSpeed();};
         soundToggle.Click+=delegate{soundToggle.IsOn=!soundToggle.IsOn;};
+        updateStatus.Click+=delegate{CheckForUpdates();};
         speedEditor.Leave+=delegate{CommitSpeedEditor();};
         speedEditor.KeyDown+=delegate(object sender,KeyEventArgs e){if(e.KeyCode==Keys.Enter){CommitSpeedEditor();e.Handled=true;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Escape){speedEditor.Text=FormatSpeed();e.Handled=true;e.SuppressKeyPress=true;}};
-        BuildUi();detector.Interval=1000;detector.Tick+=delegate{DetectGame();};Shown+=delegate{RegisterKeys();detector.Start();DetectGame();};
+        BuildUi();detector.Interval=1000;detector.Tick+=delegate{DetectGame();AdvanceUpdateFlash();};Shown+=delegate{RegisterKeys();detector.Start();DetectGame();CheckForUpdates();};
     }
 
     internal static int LanguageForCulture(CultureInfo culture)
@@ -472,12 +528,12 @@ internal sealed class TrainerForm : Form
     void BuildUi()
     {
         SuspendLayout();
-        foreach(Control reused in new Control[]{processInfo,status,hotkeyHint,soundLabel,soundToggle,speedToggle,speedEditor,wood,food,gold,stone,speed})
+        foreach(Control reused in new Control[]{processInfo,status,hotkeyHint,soundLabel,soundToggle,updateStatus,speedToggle,speedEditor,wood,food,gold,stone,speed})
             if(reused.Parent!=null)reused.Parent.Controls.Remove(reused);
         while(Controls.Count>0){Control old=Controls[0];Controls.RemoveAt(0);old.Dispose();}
         var header=new Panel{Dock=DockStyle.Top,Height=70,BackColor=Color.FromArgb(28,30,31)};Controls.Add(header);
         header.Controls.Add(new Label{Text="Age of Empires II: Definitive Edition",ForeColor=Orange,Font=new Font(Font.FontFamily,15,FontStyle.Bold),AutoSize=true,Location=new Point(68,12)});
-        header.Controls.Add(new Label{Text="v101.103.57257.0 - Build 188329 V3  Plus 12 Trainer",ForeColor=Color.Gainsboro,Font=new Font(Font.FontFamily,10,FontStyle.Bold),AutoSize=true,Location=new Point(94,39)});
+        header.Controls.Add(new Label{Text="v101.103.57257.0 - Build 188329 Plus 12 Trainer",ForeColor=Color.Gainsboro,Font=new Font(Font.FontFamily,10,FontStyle.Bold),AutoSize=true,Location=new Point(94,39)});
         AddLanguageSelector(header);
 
         var left=new Panel{Location=new Point(6,74),Size=new Size(220,598),BackColor=PanelColor};Controls.Add(left);
@@ -489,8 +545,12 @@ internal sealed class TrainerForm : Form
         soundLabel.AutoSize=true;soundLabel.ForeColor=Color.Silver;soundLabel.RightToLeft=language==6?RightToLeft.Yes:RightToLeft.No;left.Controls.Add(soundLabel);
         soundToggle.AccessibleName=T("提示音开关","提示音開關","Sound effects toggle");
         soundToggle.Location=new Point(soundLabel.Right+6,428);left.Controls.Add(soundToggle);
-        left.Controls.Add(new Label{Text=T("适配 Build 188329\r\n仅限单机使用","適配 Build 188329\r\n僅限單機使用","Adapted for Build 188329\r\nSingle-player use only"),Location=new Point(4,497),Size=new Size(210,45),ForeColor=Color.Gray});
-        var projectLink=new LinkLabel{Text=T("项目主页：GitHub","專案首頁：GitHub","Project page: GitHub"),Location=new Point(4,542),AutoSize=true,LinkColor=Orange,ActiveLinkColor=Color.White,Font=new Font(Font.FontFamily,8.5f,FontStyle.Underline)};
+        left.Controls.Add(new Label{Text=T("适配 Build 188329\r\n仅限单机使用","適配 Build 188329\r\n僅限單機使用","Adapted for Build 188329\r\nSingle-player use only"),Location=new Point(4,497),Size=new Size(210,38),ForeColor=Color.Gray});
+        updateStatus.Location=new Point(4,539);updateStatus.Size=new Size(212,23);updateStatus.Font=new Font(Font.FontFamily,8.5f);
+        updateStatus.RightToLeft=language==6?RightToLeft.Yes:RightToLeft.No;
+        updateStatus.TextAlign=language==6?ContentAlignment.MiddleRight:ContentAlignment.MiddleLeft;
+        updateStatus.Cursor=Cursors.Hand;updateStatus.AutoEllipsis=true;left.Controls.Add(updateStatus);RenderUpdateStatus();
+        var projectLink=new LinkLabel{Text=T("项目主页：GitHub","專案首頁：GitHub","Project page: GitHub"),Location=new Point(4,565),AutoSize=true,LinkColor=Orange,ActiveLinkColor=Color.White,Font=new Font(Font.FontFamily,8.5f,FontStyle.Underline)};
         projectLink.LinkClicked+=delegate{try{Process.Start(new ProcessStartInfo("https://github.com/KagurazakaNatsuki/AOE2-Trainer"){UseShellExecute=true});}catch(Exception e){SetStatus(()=>T("无法打开项目主页：","無法開啟專案首頁：","Cannot open project page: ")+e.Message,true);}};
         left.Controls.Add(projectLink);
 
@@ -519,6 +579,54 @@ internal sealed class TrainerForm : Form
         UpdateProcessInfo();UpdateSpeedToggle();UpdateHotkeyHint();
         if(statusMessage==null)SetStatus(()=>T("等待游戏进程……","等待遊戲進程……","Waiting for game process..."));else RenderStatus();
         ResumeLayout(true);
+    }
+
+    void RenderUpdateStatus()
+    {
+        switch(updateCheckState)
+        {
+            case UpdateCheckState.Current:
+                updateStatus.Text=T("修改器已是最新版","修改器已是最新版本","Trainer is up to date");break;
+            case UpdateCheckState.Outdated:
+                updateStatus.Text=T("修改器需要更新","修改器需要更新","Trainer update required");break;
+            case UpdateCheckState.Unpublished:
+                updateStatus.Text=T("本地测试版尚未发布","本地測試版尚未發布","Local test build not released");break;
+            case UpdateCheckState.Unavailable:
+                updateStatus.Text=T("暂时无法检查更新","暫時無法檢查更新","Update check unavailable");break;
+            default:
+                updateStatus.Text=T("正在检查更新……","正在檢查更新……","Checking for updates...");break;
+        }
+        updateStatus.ForeColor=updateCheckState==UpdateCheckState.Outdated?(updateFlashOrange?Orange:Color.White):Color.Silver;
+        updateStatus.AccessibleName=updateStatus.Text;
+    }
+    void AdvanceUpdateFlash()
+    {
+        if(updateCheckState!=UpdateCheckState.Outdated)return;
+        updateFlashOrange=!updateFlashOrange;
+        updateStatus.ForeColor=updateFlashOrange?Orange:Color.White;
+    }
+    void CheckForUpdates()
+    {
+        if(updateCheckBusy)return;
+        updateCheckBusy=true;updateCheckState=UpdateCheckState.Checking;RenderUpdateStatus();
+        Task.Run(delegate
+        {
+            UpdateCheckState result;
+            try
+            {
+                int comparison=UpdateChecker.CompareCurrentToLatest(UpdateChecker.CurrentReleaseTag,UpdateChecker.FetchLatestTag());
+                result=comparison<0?UpdateCheckState.Outdated:(comparison>0?UpdateCheckState.Unpublished:UpdateCheckState.Current);
+            }
+            catch{result=UpdateCheckState.Unavailable;}
+            try
+            {
+                if(IsHandleCreated&&!IsDisposed)BeginInvoke((Action)delegate
+                {
+                    updateCheckBusy=false;updateCheckState=result;updateFlashOrange=true;RenderUpdateStatus();
+                });
+            }
+            catch(InvalidOperationException){}
+        });
     }
 
     void AddLanguageSelector(Panel header)
