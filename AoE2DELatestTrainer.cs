@@ -12,9 +12,9 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Age of Empires II Definitive Edition Plus 12 Trainer V3")]
-[assembly: AssemblyDescription("Single-player trainer for AoE2DE 101.103.54800.0")]
+[assembly: AssemblyDescription("Single-player trainer for AoE2DE 101.103.57257.0")]
 [assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.4")]
+[assembly: AssemblyFileVersion("1.0.0.5")]
 
 internal static class Native
 {
@@ -50,8 +50,8 @@ internal sealed class ObjectMemoryRegion
 internal static class Engine
 {
     const ulong K1=0x6AE24D3352F04511UL,K2=0xC22D6B496D833977UL,K3=0x042AC42976FCCEF5UL,K4=0xA9834B738A7DD167UL;
-    const ulong HX=0x0F2A55F7A61DD00EUL,HS=0x147B5E081EC087D9UL;
-    internal const ulong UnitVtableRva=0x32B8270UL,BuildingVtableRva=0x32B5FC8UL,ResearchActionVtableRva=0x3228798UL;
+    const ulong HX=0x32F9EB34FC733DBDUL,HS=0x4A707D51D10B218EUL;
+    internal const ulong UnitVtableRva=0x32B71C0UL,BuildingVtableRva=0x32B4FA8UL,RecruitActionVtableRva=0x3227700UL,ResearchActionVtableRva=0x32279A8UL;
     const ulong SpeedManagerOffset=0x8UL,SpeedSettingsOffset=0x228UL,SpeedValuesOffset=0xCUL;
     const ulong BuildingQueueOffset=0x8A8UL,QueueFirstNodeOffset=0x10UL,RecruitElapsedOffset=0x6CUL,ResearchIdOffset=0x68UL,ResearchElapsedOffset=0x70UL;
     const uint RecruitActionKind=0x66,ResearchActionKind=0x67;
@@ -67,7 +67,7 @@ internal static class Engine
     internal static GameContext Open(bool write)
     {
         Process[] ps=Process.GetProcessesByName("AoE2DE_s"); if(ps.Length!=1)throw new InvalidOperationException("请先启动一局游戏（需要且只能有一个 AoE2DE_s 进程）。");
-        Process p=ps[0];if(p.MainModule.FileVersionInfo.FileVersion!="101.103.54800.0")throw new InvalidOperationException("仅支持游戏版本 101.103.54800.0。检测到："+p.MainModule.FileVersionInfo.FileVersion);
+        Process p=ps[0];if(p.MainModule.FileVersionInfo.FileVersion!="101.103.57257.0")throw new InvalidOperationException("仅支持游戏版本 101.103.57257.0。检测到："+p.MainModule.FileVersionInfo.FileVersion);
         uint access=Native.Q|Native.R|(write?Native.W|Native.O:0); IntPtr h=Native.OpenProcess(access,false,p.Id);
         if(h==IntPtr.Zero)throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(),"无法打开游戏进程");
         try
@@ -223,11 +223,12 @@ internal static class Engine
                !TryU64(c.Handle,node,out action)||action<0x10000)continue;
             uint kind;
             if(!TryU32(c.Handle,action+8,out kind)||(kind&0xFFFF)!=expectedKind)continue;
+            ulong vtable;
+            if(!TryU64(c.Handle,action,out vtable)||vtable!=c.ModuleBase+(expectedKind==ResearchActionKind?ResearchActionVtableRva:RecruitActionVtableRva))continue;
             if(expectedKind==ResearchActionKind)
             {
-                ulong vtable;uint techId;
-                if(!TryU64(c.Handle,action,out vtable)||vtable!=c.ModuleBase+ResearchActionVtableRva||
-                   !TryU32(c.Handle,action+ResearchIdOffset,out techId)||techId==0||techId>10000)continue;
+                uint techId;
+                if(!TryU32(c.Handle,action+ResearchIdOffset,out techId)||techId==0||techId>10000)continue;
             }
             active++;
             uint raw;ulong currentAction;
@@ -279,14 +280,17 @@ internal static class Engine
     {
         using(GameContext c=Open(true))
         {
-            SetResource(c,195,1000f);try{Thread.Sleep(1500);return "当前建造任务已执行";}finally{SetResource(c,195,1f);}
+            float original=Resource(c,195);
+            if(float.IsNaN(original)||float.IsInfinity(original)||original<0||original>100)
+                throw new InvalidOperationException("建造速度原值未通过校验，未修改。");
+            SetResource(c,195,1000f);try{Thread.Sleep(1500);return "当前建造任务已执行";}finally{SetResource(c,195,original);}
         }
     }
 
     static float DecodeResource(ulong raw){ulong v=((raw^K1)^K2)-K3;v^=K4;return BitConverter.ToSingle(BitConverter.GetBytes((uint)v),0);}
     static ulong EncodeResource(float v){ulong bits=BitConverter.ToUInt32(BitConverter.GetBytes(v),0);return (((bits^K4)+K3)^K2)^K1;}
-    static float DecodeHealth(ulong raw){ulong p=unchecked((raw^HX)-HS);return BitConverter.ToSingle(BitConverter.GetBytes((uint)p),0);}
-    static ulong EncodeHealth(ulong raw,float v){ulong p=unchecked((raw^HX)-HS),bits=BitConverter.ToUInt32(BitConverter.GetBytes(v),0);p=(p&0xFFFFFFFF00000000UL)|bits;return unchecked((p+HS)^HX);}
+    static float DecodeHealth(ulong raw){ulong p=unchecked(raw+HX+HS);return BitConverter.ToSingle(BitConverter.GetBytes((uint)p),0);}
+    static ulong EncodeHealth(ulong raw,float v){ulong p=unchecked(raw+HX+HS),bits=BitConverter.ToUInt32(BitConverter.GetBytes(v),0);p=(p&0xFFFFFFFF00000000UL)|bits;return unchecked(p-HS-HX);}
     internal static byte[] Read(IntPtr h,ulong a,int n){byte[]b=new byte[n];UIntPtr g;if(!Native.ReadProcessMemory(h,new IntPtr((long)a),b,new UIntPtr((uint)n),out g)||g.ToUInt64()!=(ulong)n)throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(),"读取游戏内存失败");return b;}
     internal static void Write(IntPtr h,ulong a,byte[]b){UIntPtr n;if(!Native.WriteProcessMemory(h,new IntPtr((long)a),b,new UIntPtr((uint)b.Length),out n)||n.ToUInt64()!=(ulong)b.Length)throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(),"写入游戏内存失败");}
     static ulong U64(IntPtr h,ulong a){return BitConverter.ToUInt64(Read(h,a,8),0);} static int I32(IntPtr h,ulong a){return BitConverter.ToInt32(Read(h,a,4),0);}
@@ -473,7 +477,7 @@ internal sealed class TrainerForm : Form
         while(Controls.Count>0){Control old=Controls[0];Controls.RemoveAt(0);old.Dispose();}
         var header=new Panel{Dock=DockStyle.Top,Height=70,BackColor=Color.FromArgb(28,30,31)};Controls.Add(header);
         header.Controls.Add(new Label{Text="Age of Empires II: Definitive Edition",ForeColor=Orange,Font=new Font(Font.FontFamily,15,FontStyle.Bold),AutoSize=true,Location=new Point(68,12)});
-        header.Controls.Add(new Label{Text="v101.103.54800.0 - Build 185872 V3  Plus 12 Trainer",ForeColor=Color.Gainsboro,Font=new Font(Font.FontFamily,10,FontStyle.Bold),AutoSize=true,Location=new Point(94,39)});
+        header.Controls.Add(new Label{Text="v101.103.57257.0 - Build 188329 V3  Plus 12 Trainer",ForeColor=Color.Gainsboro,Font=new Font(Font.FontFamily,10,FontStyle.Bold),AutoSize=true,Location=new Point(94,39)});
         AddLanguageSelector(header);
 
         var left=new Panel{Location=new Point(6,74),Size=new Size(220,598),BackColor=PanelColor};Controls.Add(left);
@@ -485,7 +489,7 @@ internal sealed class TrainerForm : Form
         soundLabel.AutoSize=true;soundLabel.ForeColor=Color.Silver;soundLabel.RightToLeft=language==6?RightToLeft.Yes:RightToLeft.No;left.Controls.Add(soundLabel);
         soundToggle.AccessibleName=T("提示音开关","提示音開關","Sound effects toggle");
         soundToggle.Location=new Point(soundLabel.Right+6,428);left.Controls.Add(soundToggle);
-        left.Controls.Add(new Label{Text=T("适配 Build 185872\r\n仅限单机使用","適配 Build 185872\r\n僅限單機使用","Adapted for Build 185872\r\nSingle-player use only"),Location=new Point(4,497),Size=new Size(210,45),ForeColor=Color.Gray});
+        left.Controls.Add(new Label{Text=T("适配 Build 188329\r\n仅限单机使用","適配 Build 188329\r\n僅限單機使用","Adapted for Build 188329\r\nSingle-player use only"),Location=new Point(4,497),Size=new Size(210,45),ForeColor=Color.Gray});
         var projectLink=new LinkLabel{Text=T("项目主页：GitHub","專案首頁：GitHub","Project page: GitHub"),Location=new Point(4,542),AutoSize=true,LinkColor=Orange,ActiveLinkColor=Color.White,Font=new Font(Font.FontFamily,8.5f,FontStyle.Underline)};
         projectLink.LinkClicked+=delegate{try{Process.Start(new ProcessStartInfo("https://github.com/KagurazakaNatsuki/AOE2-Trainer"){UseShellExecute=true});}catch(Exception e){SetStatus(()=>T("无法打开项目主页：","無法開啟專案首頁：","Cannot open project page: ")+e.Message,true);}};
         left.Controls.Add(projectLink);
@@ -705,7 +709,7 @@ internal sealed class TrainerForm : Form
                 BeginInvoke((Action)delegate
                 {
                     nextAttachAttempt=DateTime.UtcNow.AddSeconds(5);UpdateProcessInfo();
-                    if(detail.StartsWith("仅支持游戏版本"))SetStatus(()=>T("仅支持游戏版本 101.103.54800.0。检测到：","僅支援遊戲版本 101.103.54800.0。偵測到：","Only game version 101.103.54800.0 is supported. Detected: ")+detail.Substring(detail.LastIndexOf('：')+1),true);
+                    if(detail.StartsWith("仅支持游戏版本"))SetStatus(()=>T("仅支持游戏版本 101.103.57257.0。检测到：","僅支援遊戲版本 101.103.57257.0。偵測到：","Only game version 101.103.57257.0 is supported. Detected: ")+detail.Substring(detail.LastIndexOf('：')+1),true);
                     else if(detail.StartsWith("当前不在有效的单人对局"))
                     {
                         if(speedOverrideActive){speedOverrideActive=false;UpdateSpeedToggle();}
